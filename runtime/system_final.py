@@ -44,7 +44,7 @@ def build_features(df, i):
 
 
 # ----------------------------
-# LLM Stub (Replace Later)
+# LLM 
 # ----------------------------
 
 def send_to_llm(sensor_row, prediction, anomaly_label):
@@ -75,18 +75,18 @@ def main():
 
         row = df.iloc[i]
 
-        # 1️⃣ Sensor → DT
+        # Sensor → DT
         prediction = dt.predict(row[COLDT])
 
-        # 2️⃣ Sensor → Classifier
+        #  Sensor → Classifier
         features = build_features(df, i)
         prob = behavior_clf.predict_proba([features])[0][1]
         anomaly_label = int(prob > 0.5)
 
-        # 3️⃣ Send everything to LLM
+        #  Send everything to LLM
         send_to_llm(row, prediction, anomaly_label)
 
-        # 4️⃣ Classifier → DT (via gate)
+        #  Classifier → DT (via gate)
         gate.update_state(dt, row, prediction, anomaly_label)
 
     print("System Final run completed.")
