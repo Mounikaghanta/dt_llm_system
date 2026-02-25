@@ -41,7 +41,7 @@ class DTState:
 class DigitalTwinV2:
     """
     Physics-informed DT:
-    - Learns coefficients for T and Td using cyclical features (hour, day-of-year) + autoregressive terms.
+    - Learns coefficients for T and Td using cyclical features (hour, day-of-year)
     - Enforces Td <= T.
     - Computes RH from T and Td via vapor pressure relation.
     """
@@ -58,7 +58,7 @@ class DigitalTwinV2:
         hour_sin, hour_cos = _hour_sin_cos(ts)
         doy_sin, doy_cos = _doy_sin_cos(ts)
 
-        # interactions (simple but effective)
+        
         hum_x_hour_sin = self.state.RH * hour_sin
         hum_x_hour_cos = self.state.RH * hour_cos
 
