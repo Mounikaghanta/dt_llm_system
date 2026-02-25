@@ -1,0 +1,10 @@
+langchain
+langchain-core
+langgraph
+langgraph-checkpoint
+langgraph-prebuilt
+langgraph-sdk
+langsmith
+httpx
+pydantic
+orjson
