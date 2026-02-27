@@ -1,0 +1,145 @@
+#fault injection code
+import numpy as np
+import pandas as pd
+import random
+
+# ==========================================================
+# Reproducibility
+# ==========================================================
+np.random.seed(42)
+random.seed(42)
+
+# ==========================================================
+# Load CLEAN base data (full month)
+# ==========================================================
+df0 = pd.read_excel("/content/test.xlsx").reset_index(drop=True)
+
+COL_DT = "Date Time"
+T, Td, RH = "T (degC)", "Tdew (degC)", "rh (%)"
+vars_all = [T, Td, RH]
+vars_drift = [T, Td]
+
+df = df0[[COL_DT, T, Td, RH]].copy()
+df["fault_label"] = "clean"
+
+N = len(df)
+print("Total samples:", N)
+
+# ==========================================================
+# Configuration
+# ==========================================================
+WIN = 6  # 1 clean + 5 anomaly
+ANOMALY_PERCENT = 0.5
+TOTAL_ANOMALIES = int(N * ANOMALY_PERCENT)
+
+N_PER_TYPE = TOTAL_ANOMALIES // 4
+
+indices = list(range(N))
+random.shuffle(indices)
+used = set()
+
+def take_window(start, win):
+    w = list(range(start, start + win))
+    used.update(w)
+    return w
+
+# ==========================================================
+# Allocate windows
+# ==========================================================
+windows = {k: [] for k in ["stuck_at", "drift", "replay"]}
+cursor = 0
+
+# ---- STUCK-AT
+while len(windows["stuck_at"]) * (WIN - 1) < N_PER_TYPE:
+    s = indices[cursor]; cursor += 1
+    if s + WIN <= N and not any(i in used for i in range(s, s + WIN)):
+        windows["stuck_at"].append(take_window(s, WIN))
+
+# ---- DRIFT
+while len(windows["drift"]) * (WIN - 1) < N_PER_TYPE:
+    s = indices[cursor]; cursor += 1
+    if s + WIN <= N and not any(i in used for i in range(s, s + WIN)):
+        windows["drift"].append(take_window(s, WIN))
+
+# ---- REPLAY
+while len(windows["replay"]) * (WIN - 1) < N_PER_TYPE:
+    s = indices[cursor]; cursor += 1
+    if s >= WIN and s + WIN <= N and not any(i in used for i in range(s, s + WIN)):
+        windows["replay"].append(take_window(s, WIN))
+
+# Remaining indices → spike & clean
+remaining = [i for i in range(N) if i not in used]
+random.shuffle(remaining)
+
+spike_idx = remaining[:N_PER_TYPE]
+clean_idx = remaining[N_PER_TYPE:N_PER_TYPE * 2]
+
+# ==========================================================
+# STUCK-AT
+# x(t) = c   from second sample onward
+# ==========================================================
+for w in windows["stuck_at"]:
+    var = random.choice(vars_all)
+    c = df.loc[w[0], var]
+    df.loc[w[1:], var] = c
+    df.loc[w[1:], "fault_label"] = "stuck_at"
+
+# ==========================================================
+# DRIFT
+# x(t) = x0 + a·x0·t
+# ==========================================================
+for w in windows["drift"]:
+    var = random.choice(vars_drift)
+    a = random.uniform(0.001, 0.003)
+    x0 = df.loc[w[0], var]
+    for k, idx in enumerate(w[1:], start=1):
+        df.loc[idx, var] = x0 + a * x0 * k
+        df.loc[idx, "fault_label"] = "drift"
+
+# ==========================================================
+# REPLAY
+# x(t) = x(t − Δ)
+# ==========================================================
+for w in windows["replay"]:
+    var = random.choice(vars_all)
+    src = random.randint(0, w[0] - WIN)
+    replay_vals = df0.loc[src:src + WIN - 2, var].values
+    df.loc[w[1:], var] = replay_vals
+    df.loc[w[1:], "fault_label"] = "replay"
+
+# ==========================================================
+# SPIKE
+# x(t) = x(t) + n(t)
+# ==========================================================
+for idx in spike_idx:
+    var = random.choice(vars_all)
+    df.loc[idx, var] = df.loc[idx, var] + np.random.normal(0, 3)
+    df.loc[idx, "fault_label"] = "spike"
+
+# ==========================================================
+# Binary label
+# ==========================================================
+df["binary_label"] = df["fault_label"].apply(
+    lambda x: 0 if x == "clean" else 1
+)
+
+# ==========================================================
+# Final check
+# ==========================================================
+print("\nFault label counts:")
+print(df["fault_label"].value_counts())
+
+print("\nBinary counts:")
+print(df["binary_label"].value_counts())
+
+print("Class balance ratio:", df["binary_label"].mean())
+#assert df["binary_label"].value_counts()[0] == N // 2
+#assert df["binary_label"].value_counts()[1] == N // 2
+
+print("\nDataset balanced and logically consistent ✅")
+
+# ==========================================================
+# Save
+# ==========================================================
+df.to_excel("test_balanced_faults.xlsx", index=False)
+print("Saved: month_balanced_faults.xlsx")
